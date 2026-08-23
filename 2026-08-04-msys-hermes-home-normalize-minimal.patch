@@ -1,0 +1,42 @@
+--- a/hermes_constants.py
++++ b/hermes_constants.py
+@@ -59,6 +59,21 @@ def _get_platform_default_hermes_home() -> Path:
+     return Path.home() / ".hermes"
+ 
+ 
++def _normalize_hermes_home_env(raw: str) -> str:
++    """Normalize MSYS-style env values to Windows form before Path() construction.
++
++    Under git-bash, MSYS converts Win32 env vars to POSIX form when spawning
++    native Python (e.g. ``HERMES_HOME=/c/Users/<user>/AppData/Local/hermes``).
++    A bare ``Path()`` then mangles the leading ``/c`` into a rooted relative
++    path (``\\c\\Users\\...``), silently pointing at a non-existent shadow tree
++    -- which breaks board enumeration and can create junk ``C:\\c\\...`` dirs.
++    Convert ``/x/...`` -> ``X:/...`` on win32 only; POSIX systems pass through.
++    """
++    if sys.platform == "win32" and len(raw) >= 3 and raw[0] == "/" and raw[1].isalpha() and raw[2] == "/":
++        return f"{raw[1].upper()}:/{raw[3:]}"
++    return raw
++
++
+ def _hermes_home_from_env() -> Path:
+     """Resolve HERMES_HOME from the process environment only.
+ 
+@@ -70,7 +85,7 @@ def _hermes_home_from_env() -> Path:
+     """
+     val = os.environ.get("HERMES_HOME", "").strip()
+     if val:
+-        return Path(val)
++        return Path(_normalize_hermes_home_env(val))
+     return _get_platform_default_hermes_home()
+ 
+ 
+@@ -194,7 +209,7 @@ def get_default_hermes_root() -> Path:
+     env_home = os.environ.get("HERMES_HOME", "")
+     if not env_home:
+         return native_home
+-    env_path = Path(env_home)
++    env_path = Path(_normalize_hermes_home_env(env_home))
+     try:
+         env_path.resolve().relative_to(native_home.resolve())
+         # HERMES_HOME is under ~/.hermes (normal or profile mode)
